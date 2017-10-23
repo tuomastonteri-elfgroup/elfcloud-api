@@ -3259,15 +3259,19 @@ This request does not have session state requirements. The call is privileged an
       "account": {
         "account_name": "example.com",
         "company_name": "Example Corporation",
-        "business_number": "FI12345678"
+        "business_number": "FI12345678",
+		"country": "FI",
+		"company_identifier_non_eu": "US Business ID AZ123456789"
       },
       "administrator": {
         "user_name": "admin",
         "password": "abc!1234",
-        "subscribe_newsletter": false
+        "subscribe_newsletter": false,
+		"email_address": "john.smith@example.org"
       },
       "subscription": {
-        "license_count": 3
+        "license_count": 3,
+		"annual_payment": true
       }
     }
 }
@@ -3291,19 +3295,21 @@ This request can be used by authorized clients to create (register) new elfCLOUD
 
 This API function accepts the following parameters:
 
-Parameter    | Type         | Required | Description
------------- | ------------ | -------- | -----------
-account      | dict         | no      | Container dictionary for corporate account details. Can be omitted for consumer account registration.
-account.account_name | string       | yes      | Name of the corporate account to be created.
-account.company_name | string       | yes      | Name of the corporation being registered. No length requirements, can be an empty string.
-account.business_number | string       | yes      | Business ID of the corporation being registered. No length requirements, can be an empty string.
-administrator           | dict         | yes      | Container dictionary for the user to be added to the account.
-administrator.user_name | string       | yes      | User name of the administrator user being created.
-administrator.password  | string       | yes      | Password of the administrator user being created.
-administrator.subscribe_newsletter | boolean   | yes     | Whether the user wants to subscribe to the elfCLOUD newsletter.
-subscription            | dict         | yes      | Container dictionary for subscription related attributes.
-subscription.license_count    | int      | yes       | Number of licenses to start the trial period with, 1-100 range.
-subscription.annual_payment    | boolean | yes       | Whether the account trial is created with annual rather than monthly payment term.
+Parameter                          | Type         | Required | Description
+---------------------------------- | ------------ | -------- | -----------
+account                            | dict         | no       | Container dictionary for corporate account details. Can be omitted for consumer account registration.
+account.account_name               | string       | yes      | Name of the corporate account to be created.
+account.company_name               | string       | yes      | Name of the corporation being registered. No length requirements, can be an empty string.
+account.business_number            | string       | yes      | Business ID of the corporation being registered. No length requirements, can be an empty string.
+account.country                    | string       | yes      | Country code where the customer is located, required for private and corporate accounts (ISO-3166-1 alpha-2)
+account.company_identifier_non_eu  | string       | no       | Business ID of a non-EU corporation
+administrator                      | dict         | yes      | Container dictionary for the user to be added to the account.
+administrator.user_name            | string       | yes      | User name of the administrator user being created.
+administrator.password             | string       | yes      | Password of the administrator user being created.
+administrator.subscribe_newsletter | boolean      | yes      | Whether the user wants to subscribe to the elfCLOUD newsletter.
+subscription                       | dict         | yes      | Container dictionary for subscription related attributes.
+subscription.license_count         | int          | yes      | Number of licenses to start the trial period with, 1-100 range.
+subscription.annual_payment        | boolean      | yes      | Whether the account trial is created with annual rather than monthly payment term.
 
 When the `account` dictionary is omitted, the call registers a consumer account. For corporate accounts this dictionary and all it’s fields are required.
 
@@ -3328,7 +3334,7 @@ This request does not have session state requirements. The call is privileged an
 
 ## set_payment_card_token
 
-> Example request to register a new corporate account
+> Example request to bind a Stripe payment card token to the newly created account
 
 ```json
 {
@@ -3336,33 +3342,35 @@ This request does not have session state requirements. The call is privileged an
     "params": {
       "account_id": 1234,
       "authorization": "1bced851ef7592d68bad72524025d01f93be604b46813b4964b896938d547b1e",
-      "payment_card_token": "a0b0c0d0e0f0"
+      "payment_card_token": "tok_a0b0c0d0e0f0a0b0c0d0e0f0a0b0c0d0e0f0"
     }
 }
 ```
 
-> Example response indicating the token was received and the user can be redirected to the My elfCLOUD dashboard URL provided
+> Example response indicating the token was processed successfully
 
 ```json
 {
     "id": null,
     "result": {
-      "redirect_url": "https://my.elfcloud.fi/..."
+	    "status": "Account updated"
     }
 }
 ```
 
-This request can be used by authorized clients to attach an unused Stripe payment card token to a newly created elfCLOUD account. The `account_id` and `authorization` parameters are returned by the `register_account` call previously done. The account must be in a new state and no payment card has been previously bound to it. After successful operation, the end user can be redirected to the URL returned by the elfCLOUD backend. This will log the user into the service dashboard.
+This request can be used by authorized clients to attach an unused Stripe payment card token to an elfCLOUD account.
+
+During a new account registration process, the `account_id` and `authorization` parameters are returned by the `register_account` call previously done. For existing accounts in authenticated account management state, the account_id and authorization fields may be omitted.
 
 ### Request
 
 This API function accepts the following parameters:
 
-Parameter    | Type         | Required | Description
------------- | ------------ | -------- | -----------
-account_id   | int          | yes      | Account ID of an existing account. This value is got from the register_account call response.
-authorization | string       | yes      | Authorization key to be able to configure the account. This value is got from the register_account call response.
-payment_card_token | string  | yes      | Card token received from the Stripe interface after adding the card.
+Parameter          | Type         | Required         | Description
+------------------ | ------------ | ---------------- | -----------
+account_id         | int          | during reg.      | Account ID of an existing account. During registration this value is got from the register_account call response.
+authorization      | string       | during reg.      | Authorization key to be able to configure the account. This value is got from the register_account call response.
+payment_card_token | string       | yes              | Card token received from the Stripe interface after adding the card.
 
 ### Response and action
 
@@ -3370,7 +3378,7 @@ payment_card_token | string  | yes      | Card token received from the Stripe in
 
 Return Variable         | Type         | Description
 ----------------------- | ------------ | -------------
-redirect_url            | string       | A redirection URL where the user can be redirected to land on the elfCLOUD service dashboard.
+status                  | string       | "Account updated" indicates the card token was successfully processed.
 
 *Error*: Exception response is returned. In the error response, there is no result object but an error object instead (see the Error section for details).
 
@@ -3384,6 +3392,65 @@ Everyone is allowed to call this function. Session must be in authenticated stat
 
 
 
+
+
+## validate_eu_vat
+
+> Example request to validate corporate EU VAT Identifier
+
+```json
+{
+	"method": "validate_eu_vat",
+	"params": {
+		"country_code": "FI",
+		"vat_code": "23540122",
+		"company_name": "elfGROUP Kyberturvallisuuspalvelut Oy"
+	}
+}
+```
+
+> Example response indicating the VAT code is valid and matches the given company name
+
+```json
+{
+	"vat_code_valid": true,
+	"company_name_matches": true
+}
+```
+
+This request can be used by authorized clients to validate VAT codes for new EU based elfCLOUD registrations.
+
+### Request
+
+This API function accepts the following parameters:
+
+Parameter                          | Type         | Required | Description
+---------------------------------- | ------------ | -------- | -----------
+country_code                       | string       | yes      | Country code of the corporation (ISO-3166-1 alpha-2)
+vat_code                           | string       | yes      | EU format of the VAT code without the country prefix, e.g. FI23540122 becomes 23540122
+company_name                       | string       | yes      | Corporation name to be validated against the given VAT ID
+
+### Response and action
+
+*Successful*: Element `result` is a dictionary with following top level elements:
+
+Return Variable         | Type         | Description
+----------------------- | ------------ | -------------
+vat_code_valid          | boolean      | True if the given country_code + vat_code combination forms a valid EU VAT ID
+company_name_matches    | boolean      | True if the given company_name matches a valid EU VAT ID. The field is omitted if vat_code_valid == False
+
+*Error*: Exception response is returned. In the error response, there is no result object but an error object instead (see the Error section for details).
+
+Exception               | Code         | Reason
+----------------------- | ------------ | -------------
+ECClientException       | 105          | Client is not authorized to perform the request (rate limit reached or special privileges required)
+
+
+
+
+### Permissions and session state
+
+This request does not have session state requirements. The call is privileged and the client must be properly authorized to perform this action.
 
 
 ## password_change
